@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"reflect"
 	"testing"
 
 	"task191-reproof/internal/declaration"
@@ -218,5 +219,69 @@ func TestDeclarationCoverageViaIndex(t *testing.T) {
 	}
 	if !idx.HasDeclarations(1) || idx.HasDeclarations(2) {
 		t.Fatal("声明存在性判断错误")
+	}
+}
+
+// TestShortestPollutionChain 验证违规链是从源动作到违规动作的最短路径：
+// 不含无关动作，且真正的两步路径被保留。
+func TestShortestPollutionChain(t *testing.T) {
+	// DAG：1 -> 2 -> 3 -> 4（线性）；4 读取未声明 secret.env。
+	g := buildGraph([][2]int64{{1, 2}, {2, 3}, {3, 4}})
+	fd := &fakeDecl{byAction: map[int64][]*model.Declaration{
+		1: {{Path: "seed", Direction: model.DirRead}, {Path: "a", Direction: model.DirWrite}},
+		2: {{Path: "a", Direction: model.DirRead}, {Path: "b", Direction: model.DirWrite}},
+		3: {{Path: "b", Direction: model.DirRead}, {Path: "c", Direction: model.DirWrite}},
+		4: {{Path: "c", Direction: model.DirRead}, {Path: "d", Direction: model.DirWrite}},
+	}}
+	in := Inputs{
+		TargetID:      1,
+		Graph:         g,
+		DeclIndex:     fd,
+		Reads:         map[int64]map[string]struct{}{4: {"c": {}, "secret.env": {}}},
+		Writes:        map[int64]map[string]struct{}{4: {"d": {}}},
+		Tools:         map[int64]map[string]struct{}{},
+		SeedWrites:     map[string]struct{}{"seed": {}},
+		SourceActionID: 1,
+	}
+	res := New().Analyze(in)
+	if len(res.Chains) != 1 {
+		t.Fatalf("期望 1 条违规链，得到 %d", len(res.Chains))
+	}
+	c := res.Chains[0]
+	want := []int64{1, 2, 3, 4}
+	if !reflect.DeepEqual(c.ActionIDs, want) {
+		t.Fatalf("最短污染链应为 %v，得到 %v", want, c.ActionIDs)
+	}
+	if c.Length != len(want) {
+		t.Fatalf("链长度应为 %d，得到 %d", len(want), c.Length)
+	}
+}
+
+// TestShortestPollutionChainTwoStep 验证源动作直接依赖违规动作的两步路径被保留。
+func TestShortestPollutionChainTwoStep(t *testing.T) {
+	// 1 -> 2；2 读取泄漏。最短链即 [1, 2]，不得丢失。
+	g := buildGraph([][2]int64{{1, 2}})
+	fd := &fakeDecl{byAction: map[int64][]*model.Declaration{
+		1: {{Path: "seed", Direction: model.DirRead}, {Path: "a", Direction: model.DirWrite}},
+		2: {{Path: "a", Direction: model.DirRead}, {Path: "b", Direction: model.DirWrite}},
+	}}
+	in := Inputs{
+		TargetID:      1,
+		Graph:         g,
+		DeclIndex:     fd,
+		Reads:         map[int64]map[string]struct{}{2: {"a": {}, "secret.env": {}}},
+		Writes:        map[int64]map[string]struct{}{2: {"b": {}}},
+		Tools:         map[int64]map[string]struct{}{},
+		SeedWrites:     map[string]struct{}{"seed": {}},
+		SourceActionID: 1,
+	}
+	res := New().Analyze(in)
+	if len(res.Chains) != 1 {
+		t.Fatalf("期望 1 条违规链，得到 %d", len(res.Chains))
+	}
+	c := res.Chains[0]
+	want := []int64{1, 2}
+	if !reflect.DeepEqual(c.ActionIDs, want) {
+		t.Fatalf("两步污染链应为 %v，得到 %v", want, c.ActionIDs)
 	}
 }

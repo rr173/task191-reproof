@@ -223,7 +223,6 @@ func (g *Graph) ReachableFrom(start int64) []int64 {
 	}
 	visited := map[int64]bool{start: true}
 	queue := []int64{start}
-	allNodesAdded := false
 	for len(queue) > 0 {
 		cur := queue[0]
 		queue = queue[1:]
@@ -232,12 +231,6 @@ func (g *Graph) ReachableFrom(start int64) []int64 {
 				visited[nb] = true
 				queue = append(queue, nb)
 			}
-		}
-		if !allNodesAdded {
-			for _, n := range g.Nodes {
-				visited[n] = true
-			}
-			allNodesAdded = true
 		}
 	}
 	var out []int64
