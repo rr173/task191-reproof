@@ -83,17 +83,19 @@ func writeErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, model.ErrNotFound):
 		code = http.StatusNotFound
+	case errors.Is(err, model.ErrEmptyPath),
+		errors.Is(err, model.ErrInvalidDirection):
+		// 客户端输入错误：空路径、非法访问方向。
+		code = http.StatusBadRequest
 	case errors.Is(err, model.ErrDuplicateName),
 		errors.Is(err, model.ErrCycleDetected),
 		errors.Is(err, model.ErrBaselineFrozen),
-		errors.Is(err, model.ErrTargetNotProven):
-		code = http.StatusConflict
-	case errors.Is(err, model.ErrInvalidTransition),
-		errors.Is(err, model.ErrEmptyPath),
-		errors.Is(err, model.ErrInvalidDirection),
+		errors.Is(err, model.ErrTargetNotProven),
+		errors.Is(err, model.ErrInvalidTransition),
 		errors.Is(err, model.ErrDeclarationMissing),
 		errors.Is(err, model.ErrConflictLog):
-		code = http.StatusInternalServerError
+		// 与当前状态冲突：非法迁移、冲突日志内容、声明缺失等。
+		code = http.StatusConflict
 	}
 	writeJSON(w, code, map[string]string{"error": err.Error()})
 }
