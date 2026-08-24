@@ -210,9 +210,10 @@ func (ps *ProofStore) InvalidateOthers(ctx context.Context, targetID, keepID int
 func (ps *ProofStore) CreateBaseline(ctx context.Context, b *model.Baseline, items []*model.BaselineItem) (*model.Baseline, error) {
 	frozen := b.FrozenAt.Format(time.RFC3339Nano)
 	err := ps.s.WithTx(ctx, func(tx *sql.Tx) error {
-		// 已存在的 active 基线先降级为 superseded（同一目标只允许一条 active）。
+		// 同一目标再次冻结：把已存在的 active 基线降级为 superseded
+		// （同一目标只允许一条 active，旧基线被新基线替代）。
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE baselines SET status='active' WHERE target_id=? AND status='active'`, b.TargetID); err != nil {
+			`UPDATE baselines SET status='superseded' WHERE target_id=? AND status='active'`, b.TargetID); err != nil {
 			return err
 		}
 		res, err := tx.ExecContext(ctx,

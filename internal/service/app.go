@@ -443,7 +443,8 @@ func (a *App) FreezeBaseline(ctx context.Context, targetID int64) (*model.Baseli
 	if err != nil {
 		return nil, err
 	}
-	if t.Status != model.TargetProven {
+	// 允许已 baselined 的目标再次冻结：旧基线将被 CreateBaseline 降级为 superseded。
+	if t.Status != model.TargetProven && t.Status != model.TargetBaselined {
 		return nil, model.ErrTargetNotProven
 	}
 	p, err := a.proofs.LatestByTarget(ctx, targetID)

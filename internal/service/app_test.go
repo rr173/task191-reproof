@@ -200,6 +200,82 @@ func TestProofAndBaselineLifecycle(t *testing.T) {
 	}
 }
 
+// TestRefreezeBaselineSupersedesOld 验证同一目标再次冻结基线时：
+// 创建新的 active 基线、把旧基线标记为 superseded、保留版本替代关系。
+func TestRefreezeBaselineSupersedesOld(t *testing.T) {
+	app, _ := openApp(t)
+	ctx := context.Background()
+	tid := buildDemoTarget(t, app)
+
+	// 补齐泄漏后分析并生成证明。
+	acts, _ := app.ListActions(ctx, tid)
+	var bAct int64
+	for _, a := range acts {
+		if a.Name == "b" {
+			bAct = a.ID
+		}
+	}
+	_, _ = app.AddDeclaration(ctx, bAct, "env.local", model.DirRead, "")
+	status, _, _ := app.AnalyzeTarget(ctx, tid)
+	if status != model.TargetProven {
+		t.Fatalf("应 proven，得到 %s", status)
+	}
+	if _, err := app.GenerateProof(ctx, tid); err != nil {
+		t.Fatalf("generate proof: %v", err)
+	}
+
+	// 第一次冻结。
+	first, err := app.FreezeBaseline(ctx, tid)
+	if err != nil {
+		t.Fatalf("第一次冻结: %v", err)
+	}
+
+	// 再次冻结：应创建新 active 基线，旧基线降级为 superseded。
+	second, err := app.FreezeBaseline(ctx, tid)
+	if err != nil {
+		t.Fatalf("第二次冻结: %v", err)
+	}
+	if second.ID == first.ID {
+		t.Fatalf("第二次冻结应创建新基线，得到相同 ID %d", second.ID)
+	}
+	if second.Status != model.BaselineActive {
+		t.Fatalf("新基线应为 active: %s", second.Status)
+	}
+
+	// 全部基线：旧基线 superseded，仅一条 active。
+	bases, err := app.ListBaselines(ctx, tid)
+	if err != nil {
+		t.Fatalf("list baselines: %v", err)
+	}
+	if len(bases) != 2 {
+		t.Fatalf("期望 2 条基线，得到 %d", len(bases))
+	}
+	activeCount, superseded := 0, map[int64]bool{}
+	for _, b := range bases {
+		switch b.Status {
+		case model.BaselineActive:
+			activeCount++
+		case model.BaselineSuperseded:
+			superseded[b.ID] = true
+		}
+	}
+	if activeCount != 1 {
+		t.Fatalf("期望恰好 1 条 active 基线，得到 %d", activeCount)
+	}
+	if !superseded[first.ID] {
+		t.Fatalf("旧基线 %d 应为 superseded，实际 %v", first.ID, bases)
+	}
+
+	// ActiveBaseline 应返回新基线（最新冻结的）。
+	active, err := app.proofs.ActiveBaseline(ctx, tid)
+	if err != nil {
+		t.Fatalf("active baseline: %v", err)
+	}
+	if active.ID != second.ID {
+		t.Fatalf("active 基线应为 %d，得到 %d", second.ID, active.ID)
+	}
+}
+
 func TestCycleRejectedOnAddDep(t *testing.T) {
 	app, _ := openApp(t)
 	ctx := context.Background()
