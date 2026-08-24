@@ -8,6 +8,7 @@ import (
 
 // detectWriteConflicts 找出两个动作无序写同一路径的冲突。
 // 判定：存在写者 w1 != w2 且 w1 不能到达 w2、w2 不能到达 w1（无顺序关系）。
+// 即两者在依赖偏序上不可比——任一方向可达即视为有序，不报冲突。
 func (a *Analyzer) detectWriteConflicts(in Inputs) []*model.Violation {
 	writersByPath := make(map[string][]int64)
 	for actionID, paths := range in.Writes {
@@ -27,7 +28,8 @@ func (a *Analyzer) detectWriteConflicts(in Inputs) []*model.Violation {
 				w1, w2 := ws[i], ws[j]
 				reach1 := in.Graph.ReachableFrom(w1)
 				reach2 := in.Graph.ReachableFrom(w2)
-				hasOrder := contains(reach1, w2) && contains(reach2, w1)
+				// 任一方向可达即有序；仅当两个方向都不可达时才算无序写冲突。
+				hasOrder := contains(reach1, w2) || contains(reach2, w1)
 				if !hasOrder {
 					out = append(out, &model.Violation{
 						TargetID: in.TargetID, ActionID: w2, Kind: model.ViolationWriteConflict,

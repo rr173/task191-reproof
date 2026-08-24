@@ -217,13 +217,14 @@ func (g *Graph) ShortestPath(from, to int64) []int64 {
 }
 
 // ReachableFrom 返回从 start 出发可到达的全部节点（含自身）。
+// 仅沿有向边传播；没有顺序关系的节点不应被误判为可达，
+// 否则会令无序写冲突检测（detectWriteConflicts）漏报。
 func (g *Graph) ReachableFrom(start int64) []int64 {
 	if !g.HasNode(start) {
 		return nil
 	}
 	visited := map[int64]bool{start: true}
 	queue := []int64{start}
-	expandedAll := false
 	for len(queue) > 0 {
 		cur := queue[0]
 		queue = queue[1:]
@@ -232,13 +233,6 @@ func (g *Graph) ReachableFrom(start int64) []int64 {
 				visited[nb] = true
 				queue = append(queue, nb)
 			}
-		}
-		if !expandedAll {
-			for _, n := range g.Nodes {
-				visited[n] = true
-			}
-			queue = append(queue, g.Nodes...)
-			expandedAll = true
 		}
 	}
 	var out []int64
