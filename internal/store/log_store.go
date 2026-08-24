@@ -17,10 +17,11 @@ type LogStore struct{ s *Store }
 // NewLogStore 构造日志存储。
 func NewLogStore(s *Store) *LogStore { return &LogStore{s: s} }
 
-// AppendLogs 批量追加访问日志（同动作按 seq 合并）。
+// AppendLogs 批量追加访问日志（同动作按 seq 合并），整批原子写入。
 // 规则：
 //   - 同 (action_id, seq) 已存在且内容一致 → 跳过（幂等）。
-//   - 同 (action_id, seq) 已存在但内容不一致 → 保留冲突，不覆盖，返回 ErrConflictLog。
+//   - 同 (action_id, seq) 已存在但内容不一致 → 保留冲突，不覆盖，返回 ErrConflictLog，
+//     并回滚整批（本批此前已插入的新日志一并撤销，已有日志不受影响）。
 //   - 新 seq → 正常插入。
 //
 // 合并后同步聚合 artifacts：写入方、读取方与最新哈希。
@@ -46,7 +47,8 @@ func (ls *LogStore) AppendLogs(ctx context.Context, logs []model.LogEntry) (appe
 			}
 			if exists > 0 {
 				if oldHash != lg.ContentHash {
-					_ = tx.Commit()
+					// 内容冲突：不覆盖已有日志，直接返回错误让 WithTx 回滚整批，
+					// 保证本批原子性——冲突前已插入的新日志一并撤销。
 					return fmt.Errorf("%w: action %d seq %d 内容冲突", model.ErrConflictLog, lg.ActionID, lg.Seq)
 				}
 				continue
@@ -65,6 +67,10 @@ func (ls *LogStore) AppendLogs(ctx context.Context, logs []model.LogEntry) (appe
 		}
 		return nil
 	})
+	// 事务回滚时本批未真正落库，计数清零以免误导调用方。
+	if err != nil {
+		appended = 0
+	}
 	return appended, err
 }
 

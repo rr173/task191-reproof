@@ -138,6 +138,61 @@ func TestAppendLogsIdempotentAndConflict(t *testing.T) {
 	}
 }
 
+func TestAppendLogsBatchConflictAtomic(t *testing.T) {
+	st := openTestStore(t)
+	ls := NewLogStore(st)
+	ctx := context.Background()
+	tgt, err := NewTargetStore(st).Create(ctx, model.NewTarget("t", ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	act, err := NewActionStore(st).Create(ctx, model.NewAction(tgt.ID, "a", ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	aid := act.ID
+
+	// 先落 2 条历史日志。
+	if _, err := ls.AppendLogs(ctx, []model.LogEntry{
+		{ActionID: aid, Seq: 1, Path: "a", Direction: model.DirRead, ContentHash: "h1", SizeBytes: 10},
+		{ActionID: aid, Seq: 2, Path: "b", Direction: model.DirWrite, ContentHash: "h2", SizeBytes: 20},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// 一批：前面是全新 seq，最后一条与历史 seq=1 冲突。
+	// 整批都不应留下任何新日志（原子回滚），已有日志保持不变。
+	batch := []model.LogEntry{
+		{ActionID: aid, Seq: 3, Path: "c", Direction: model.DirRead, ContentHash: "h3", SizeBytes: 30},
+		{ActionID: aid, Seq: 4, Path: "d", Direction: model.DirWrite, ContentHash: "h4", SizeBytes: 40},
+		{ActionID: aid, Seq: 1, Path: "a", Direction: model.DirRead, ContentHash: "h1-CHANGED", SizeBytes: 99},
+	}
+	n, err := ls.AppendLogs(ctx, batch)
+	if err == nil {
+		t.Fatal("内容冲突应报错")
+	}
+	if n != 0 {
+		t.Fatalf("冲突批次不应计入新增: n=%d", n)
+	}
+	// 仅剩历史 2 条，新 seq 3/4 不应残留。
+	all, err := ls.ListAll(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 {
+		var seqs []int
+		for _, lg := range all {
+			seqs = append(seqs, lg.Seq)
+		}
+		t.Fatalf("冲突批次应整批回滚，仅剩历史 2 条，得到 %d: seq=%v", len(all), seqs)
+	}
+	for _, lg := range all {
+		if lg.Seq == 1 && lg.ContentHash != "h1" {
+			t.Fatalf("已有 seq=1 内容被破坏: %s", lg.ContentHash)
+		}
+	}
+}
+
 func TestPinnedAndProofPersist(t *testing.T) {
 	st := openTestStore(t)
 	ctx := context.Background()
