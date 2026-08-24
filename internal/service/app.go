@@ -525,10 +525,10 @@ func (a *App) CompareBaseline(ctx context.Context, targetID int64) (*proof.Compa
 	res := a.pg.Compare(current, items)
 	res.BaselineID = base.ID
 	if !res.Clean {
-		// 漂移 → 目标退回 building，证明失效。
+		// 漂移 → 目标退回 building，原有效证明标记失效（漂移失效语义）。
 		if p, err := a.proofs.GetByID(ctx, base.ProofID); err == nil {
 			now := time.Now().UTC()
-			_ = a.proofs.UpdateStatus(ctx, p.ID, model.ProofSuperseded, &now)
+			_ = a.proofs.UpdateStatus(ctx, p.ID, model.ProofInvalidated, &now)
 		}
 		_ = a.targets.UpdateStatus(ctx, targetID, model.TargetBuilding)
 	}

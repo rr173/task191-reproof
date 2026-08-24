@@ -40,7 +40,7 @@ func (a *BuildAction) Validate(next ActionStatus) error {
 func (p *Proof) Validate(next ProofStatus) error {
 	valid := map[ProofStatus][]ProofStatus{
 		ProofDraft:       {ProofValid, ProofInvalidated},
-		ProofValid:       {ProofSuperseded},
+		ProofValid:       {ProofInvalidated, ProofSuperseded},
 		ProofInvalidated: {},
 		ProofSuperseded:  {},
 	}

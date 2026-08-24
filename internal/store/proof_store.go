@@ -195,7 +195,7 @@ func (ps *ProofStore) UpdateStatus(ctx context.Context, id int64, status model.P
 	if invalidatedAt != nil {
 		inv = invalidatedAt.Format(time.RFC3339Nano)
 	}
-	_, err := ps.s.Exec(ctx, `UPDATE proofs SET status=?, invalidated_at=? WHERE id=?`, model.ProofSuperseded, inv, id)
+	_, err := ps.s.Exec(ctx, `UPDATE proofs SET status=?, invalidated_at=? WHERE id=?`, status, inv, id)
 	return err
 }
 
