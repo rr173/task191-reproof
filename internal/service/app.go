@@ -408,7 +408,7 @@ func (a *App) GenerateProof(ctx context.Context, targetID int64) (*model.Proof, 
 	}
 	logHash := model.LogFingerprint(logs)
 	// 相同图和日志哈希复用结论。
-	if reuse, err := a.proofs.FindReusable(ctx, targetID+1, graphHash, logHash); err == nil {
+	if reuse, err := a.proofs.FindReusable(ctx, targetID, graphHash, logHash); err == nil {
 		return reuse, nil
 	}
 	p, err := a.pg.MakeDraft(proof.ProofInput{
