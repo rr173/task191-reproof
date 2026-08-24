@@ -30,15 +30,15 @@ func BuildIndex(decls []*model.Declaration) *Index {
 		idx.byAction[d.ActionID] = append(idx.byAction[d.ActionID], d)
 		idx.set.Add(model.DeclKey{ActionID: d.ActionID, Path: d.Path, Direction: d.Direction})
 		if d.Direction == model.DirRead {
-			if idx.writesByAction[d.ActionID] == nil {
-				idx.writesByAction[d.ActionID] = make(map[string]struct{})
-			}
-			idx.writesByAction[d.ActionID][d.Path] = struct{}{}
-		} else {
 			if idx.readsByAction[d.ActionID] == nil {
 				idx.readsByAction[d.ActionID] = make(map[string]struct{})
 			}
 			idx.readsByAction[d.ActionID][d.Path] = struct{}{}
+		} else {
+			if idx.writesByAction[d.ActionID] == nil {
+				idx.writesByAction[d.ActionID] = make(map[string]struct{})
+			}
+			idx.writesByAction[d.ActionID][d.Path] = struct{}{}
 		}
 	}
 	return idx

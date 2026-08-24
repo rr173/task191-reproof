@@ -92,7 +92,7 @@ func (a *Analyzer) Analyze(in Inputs) Result {
 		var problems []*model.Violation
 		// 读取泄漏：实际读取未声明。
 		for _, p := range sorted(in.Reads[actionID]) {
-			if !in.DeclIndex.Declared(actionID, p, model.DirWrite) {
+			if !in.DeclIndex.Declared(actionID, p, model.DirRead) {
 				problems = append(problems, &model.Violation{
 					TargetID: in.TargetID, ActionID: actionID, Kind: model.ViolationReadLeak,
 					Path: p, Detail: "实际读取未声明: " + p,
@@ -101,7 +101,7 @@ func (a *Analyzer) Analyze(in Inputs) Result {
 		}
 		// 未声明写入。
 		for _, p := range sorted(in.Writes[actionID]) {
-			if !in.DeclIndex.Declared(actionID, p, model.DirRead) {
+			if !in.DeclIndex.Declared(actionID, p, model.DirWrite) {
 				problems = append(problems, &model.Violation{
 					TargetID: in.TargetID, ActionID: actionID, Kind: model.ViolationUndeclaredInput,
 					Path: p, Detail: "实际写入未声明: " + p,

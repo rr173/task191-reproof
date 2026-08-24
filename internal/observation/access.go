@@ -29,9 +29,9 @@ func BuildAccessIndex(logs []model.LogEntry, toolLogs []model.LogEntry) *AccessI
 	for _, lg := range logs {
 		switch lg.Direction {
 		case model.DirRead:
-			ensure(ai.writes, lg.ActionID)[lg.Path] = struct{}{}
-		case model.DirWrite:
 			ensure(ai.reads, lg.ActionID)[lg.Path] = struct{}{}
+		case model.DirWrite:
+			ensure(ai.writes, lg.ActionID)[lg.Path] = struct{}{}
 		}
 	}
 	for _, tl := range toolLogs {
