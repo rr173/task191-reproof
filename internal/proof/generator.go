@@ -106,7 +106,6 @@ func (g *Generator) Compare(current map[string]string, baseline []*model.Baselin
 		}
 	}
 	sort.Strings(paths)
-	var b []string
 	for _, p := range paths {
 		bh, inBase := base[p]
 		ch, inCur := current[p]
@@ -115,12 +114,13 @@ func (g *Generator) Compare(current map[string]string, baseline []*model.Baselin
 			res.Missing = append(res.Missing, p)
 			res.Clean = false
 		case !inBase && inCur:
-			continue
+			// 基线冻结后新产生的输出文件：视为新增产物，判定发生漂移。
+			res.New = append(res.New, p)
+			res.Clean = false
 		case inBase && inCur && bh != ch:
 			res.Drifted = append(res.Drifted, p)
 			res.Clean = false
 		}
-		_ = b
 	}
 	res.Detail = summarize(res)
 	return res

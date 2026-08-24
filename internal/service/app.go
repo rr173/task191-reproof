@@ -484,7 +484,9 @@ func (a *App) FreezeBaseline(ctx context.Context, targetID int64) (*model.Baseli
 	return created, nil
 }
 
-// frozenItems 收集目标全部写入产物的最终哈希作为基线条目。
+// frozenItems 收集目标当前全部写入产物的最终哈希作为基线条目。
+// 与 currentHashes 保持一致的口径：凡有写入方的产物即纳入冻结，
+// 不依赖 pin 状态（pin 是冻结后的标记，冻结时尚未置位）。
 func (a *App) frozenItems(ctx context.Context, targetID int64) ([]model.BaselineItem, error) {
 	arts, err := a.logs.ListArtifacts(ctx)
 	if err != nil {
@@ -500,7 +502,7 @@ func (a *App) frozenItems(ctx context.Context, targetID int64) ([]model.Baseline
 	}
 	var out []model.BaselineItem
 	for _, ar := range arts {
-		if ar.Writer == 0 || !actIDs[ar.Writer] || ar.Status != model.ArtifactPinned {
+		if ar.Writer == 0 || !actIDs[ar.Writer] {
 			continue
 		}
 		out = append(out, model.BaselineItem{Path: ar.Path, Hash: ar.Hash, SizeBytes: ar.SizeBytes})

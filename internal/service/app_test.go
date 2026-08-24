@@ -200,6 +200,69 @@ func TestProofAndBaselineLifecycle(t *testing.T) {
 	}
 }
 
+// TestBaselineDetectsNewArtifact 回归：基线冻结后新产生的输出文件必须被判为新增产物而发生漂移。
+func TestBaselineDetectsNewArtifact(t *testing.T) {
+	app, _ := openApp(t)
+	ctx := context.Background()
+	tid := buildDemoTarget(t, app)
+
+	// 补齐泄漏后证明并冻结基线。
+	acts, _ := app.ListActions(ctx, tid)
+	var bAct int64
+	for _, a := range acts {
+		if a.Name == "b" {
+			bAct = a.ID
+		}
+	}
+	_, _ = app.AddDeclaration(ctx, bAct, "env.local", model.DirRead, "")
+	if status, _, err := app.AnalyzeTarget(ctx, tid); err != nil || status != model.TargetProven {
+		t.Fatalf("analyze: %v %s", err, status)
+	}
+	if _, err := app.GenerateProof(ctx, tid); err != nil {
+		t.Fatalf("generate proof: %v", err)
+	}
+	if _, err := app.FreezeBaseline(ctx, tid); err != nil {
+		t.Fatalf("freeze: %v", err)
+	}
+	// 冻结后立即比对应一致。
+	if cmp, err := app.CompareBaseline(ctx, tid); err != nil || !cmp.Clean {
+		t.Fatalf("冻结后基线应一致: %v %s", err, cmp.Detail)
+	}
+
+	// 追加一个基线中不存在的新输出文件。
+	var cAct int64
+	for _, a := range acts {
+		if a.Name == "c" {
+			cAct = a.ID
+		}
+	}
+	newLogs := []model.LogEntry{
+		{ActionID: cAct, Seq: 3, Path: "out_new", Direction: model.DirWrite, ContentHash: "h-new", SizeBytes: 9},
+	}
+	if _, err := app.AppendLogs(ctx, newLogs); err != nil {
+		t.Fatalf("append new artifact: %v", err)
+	}
+	cmp, err := app.CompareBaseline(ctx, tid)
+	if err != nil {
+		t.Fatalf("compare after new: %v", err)
+	}
+	if cmp.Clean {
+		t.Fatalf("新增产物应判定漂移，得到 clean")
+	}
+	if len(cmp.New) != 1 || cmp.New[0] != "out_new" {
+		t.Fatalf("应识别 out_new 为新增产物: %+v", cmp.New)
+	}
+	// 漂移 → 证明失效、目标退回 building。
+	tgt, _ := app.GetTarget(ctx, tid)
+	if tgt.Status != model.TargetBuilding {
+		t.Fatalf("漂移后目标应退回 building，得到 %s", tgt.Status)
+	}
+	proofs, _ := app.ListProofs(ctx, tid)
+	if len(proofs) == 0 || proofs[0].Status != model.ProofInvalidated {
+		t.Fatalf("漂移后证明应失效: %+v", proofs)
+	}
+}
+
 func TestCycleRejectedOnAddDep(t *testing.T) {
 	app, _ := openApp(t)
 	ctx := context.Background()
